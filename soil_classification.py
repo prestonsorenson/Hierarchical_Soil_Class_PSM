@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from skranger.ensemble import RangerForestClassifier
+from sklearn.ensemble import RandomForestClassifier
 #from kennard_stone import train_test_split
 from sklearn.model_selection import train_test_split
 import warnings
@@ -8,10 +8,10 @@ from pandas.core.common import SettingWithCopyWarning
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
-#TODO: use random forest; no need to use rangerforest
-#TODO: impliment Conditioned Latin Hypercube Sampling in Python instead of kennard stone /regular train test split
-# TODO: findCorr hardcode: cutoff val = keep only one of the variables in correlation (the one with the lowest mean absolute correlation)
+#TODO: impliment conditioned Latin Hypercube Sampling instead of kennard stone /regular train test split???
 
+# TODO: findCorr hardcode: cutoff val = keep only one of the variables in correlation (the one with the lowest mean absolute correlation)
+# TODO: plot all the figures as well
 
 # hierarchical: lower levels constrain predictions of higher levels
 
@@ -20,19 +20,36 @@ ISSUES/FOR PRESTON:
 A) CODE AVAILABILITY ISSUES
 1. kennard stone train-test split doesn't really exist/needs to be investigated further before use 
 2. no equivalent to the type of correlation that is sdone in r 
-3. python ranger function has an oob error but doesn't seem to use it anywehre? there is no documentation for it; will have to dig through the code 
 4. there may not be an equivalent to the 'probability forest' option  -- predict proba 
 
-B) QUESTIONS
-1. confirm: which ndwi bands are to be removed, all that contain 'ndwi'? 
-2. we need to subset to the specific bands that are useful... why even do the test here in python??? 
+B) QUESTIONS 
 3. need an output of the plots so they can be emulated (since I currently cannot run the script 
 4. What are we building at the very end? I lose the thread 
 """
 
 
+# TODO: make function more efficient
+# emulate findCorr function in R
+def find_corr(df, cutoff=0.9):
+    # find correlations
+    corr = df.corr()
+    # find mean of correlations
+    mean_corr = abs(corr.mean(axis=0)).sort_values(ascending=False)
+    # find correlated pairs above the cutoff
+    corr = corr.where(abs(corr.values) > cutoff).stack().index.values
+    # remove self-correlation
+    corr = [unique for unique in corr if unique[0] != unique[1]]
+    # starting with the highest mean correlation, go through pairs and append to drop list if found, then remove the item from list of lists
+    to_drop = []
+    for highest in mean_corr.index:
+        pre_len = len(corr)
+        corr = [tup for tup in corr if highest not in tup]
+        if pre_len != len(corr):
+            to_drop.append(highest)
+    final_df = df.drop(columns=to_drop)
+    return final_df, final_df.corr()
 
-# TODO: plot all the figures as well
+
 
 
 def band_eng(train, weights, feature):
@@ -54,13 +71,13 @@ def band_eng(train, weights, feature):
 
     # use sk ranger function; we are translating from the r presents, so will use presets found below to populate python function
     # https://www.rdocumentation.org/packages/ranger/versions/0.13.1/topics/ranger
-    ranger = RangerForestClassifier(n_estimators=500, importance='impurity')
+    ranger = RandomForestClassifier(n_estimators=500, importance='impurity')
     ranger_pred = ranger.fit(X=feature_df.iloc[:, 1:], y=feature_df.iloc[:, 0], sample_weight=weights)
     features = list(pd.Series(ranger_pred.feature_importances_, index=feature_df.columns[1:]).sort_values(ascending=False).index)
     val = []
     for x in range(len(features)):
         temp = feature_df[features[0:x+1]]
-        ranger = RangerForestClassifier(n_estimators=500, importance='impurity', oob_error=True, verbose=True)
+        ranger =RandomForestClassifier(n_estimators=500, importance='impurity', oob_error=True, verbose=True)
         ranger_pred = ranger.fit(X=temp, y=feature_df.iloc[:, 0], sample_weight=weights)
         # TODO: it doesn't seem as if the oob_error feature actually leads anywhere
         val.append(ranger.score(X=temp, y=feature_df.iloc[:, 0], sample_weight=weights))
@@ -94,7 +111,7 @@ def model_build(train, test, level, weights):
     final_x = train_sub[final_bands]
     final_y = train_sub.iloc[level_dict[level]]
     # TODO: determine if there would be an equivalent to probability forest (predict_proba?)
-    ranger = RangerForestClassifier(n_estimators=500, importance='impurity', oob_error=True, split_rule='extratrees')
+    ranger = RandomForestClassifier(n_estimators=500, importance='impurity', oob_error=True, split_rule='extratrees')
     ranger_pred = ranger.fit(X=final_x, y=final_y, sample_weight=weights)
     # what are being done with these???
     features = sorted(ranger_pred.feature_importances_).index()
@@ -105,9 +122,10 @@ def model_build(train, test, level, weights):
     # then there's some sort of operation with .... column... names????
     return predict
 
+
 if __name__ == '__main__':
     # get rid of unnamed column
-    eia = pd.read_csv('EIA_soil_predictors_27Jan2021_PS.csv').iloc[:,1:]
+    eia = pd.read_csv('EIA_soil_predictors_27Jan2021_PS.csv').iloc[:, 1:]
 
     # TODO: figure out the kennard stone split... for now just do regular train/test
     train, test = train_test_split(eia, train_size=0.75)  # , metric='mahal')

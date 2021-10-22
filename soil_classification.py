@@ -1,50 +1,19 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
-# from kennard_stone import train_test_split
 from sklearn.model_selection import train_test_split
 import warnings
 from pandas.core.common import SettingWithCopyWarning
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
-# TODO: impliment conditioned Latin Hypercube Sampling instead of kennard stone /regular train test split???
 
 # TODO: plot all the figures as well
 
-# TODO: for the higherarchical model: build model based on the the 'lower' class (for training data can use real labels, for test data must use predicted labels to avoid biasing results)
-
-# hierarchical: lower levels constrain predictions of higher levels
-
-"""
-### FOR EACH ONE STILL DO THE FEATURE SELECTION USING ALL DATA 
-
-for great group: 
-1. create subsets by order, and then take the first 10???? columns????? 
-2. then subset test data by predicted results 
-3. set case weights for each order 
-4. then do prediction for great groups by order (same method with second highest, etc. as before) 
-5. then we concat results (recombine results) and do the whole confusion matrix thing
-
-
-
-
-for subgroup: 
-1. before prediction for terrain features, etc. need to create weights by order (line 489)
-2. build models for each great group 
-3. make sure order for test and train is the same??????????? 
-
-
-overall: then create maps 
-"""
-
-"""
-
-"""
-
-
 # TODO: add debug and verbose features
 # TODO: make function more efficient
+
 # emulate findCorr function in R
 def find_corr(df, cutoff=0.9):
     # find correlations
@@ -63,8 +32,6 @@ def find_corr(df, cutoff=0.9):
         if pre_len != len(corr):
             to_drop.append(highest)
     return to_drop
-    # final_df = df.drop(columns=to_drop)
-    # return final_df, final_df.corr()
 
 
 def get_weights(df, level='Order', balance=False):
@@ -107,7 +74,10 @@ def band_eng(train, weights, feature):
         # print(x+1, forest.oob_score_)
         # algorithm calculates oob score, so we need to convert to error
         val.append(1 - forest.oob_score_)
-
+    plt.figure()
+    plt.plot(val)
+    plt.title(f'{feature.title()} OOB Error vs Number of Features, Sorted by Importance')
+    plt.show()
     # as per preston, we don't need to use the feature dict, just subset where it is a minimum
     # TODO: potentially create a condition that stops stops min if the delta between the two steps is less than a certain value
     return features[:val.index(min(val)) + 1]
@@ -139,29 +109,33 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
         predict = pd.DataFrame()
         most_likely = pd.DataFrame()
         for higher_level in train[kwargs['grp_type']].unique():
+            print(f'Predicting for...{higher_level}-classified values')
             # because the indices don't change, I can use the original train and test sets to subset the train/test sub by prior level
             level_x_train = final_x[train[kwargs['grp_type']] == higher_level]
             level_y_train = final_y[train[kwargs['grp_type']] == higher_level]
             level_x_test = test_x[kwargs['predict_df'] == higher_level]
 
-            level_weight = get_weights(train[train[kwargs['grp_type']] == higher_level], level, balance=True)
-            forest = RandomForestClassifier(n_estimators=500, oob_score=True)
-            forest.fit(X=level_x_train, y=level_y_train, sample_weight=level_weight)
-
-            predict_temp = pd.DataFrame(forest.predict_proba(X=level_x_test), columns=forest.classes_,
-                                        index=level_x_test.index)
-            if level_y_train.nunique() > 1:
-                most_likely_temp = np.argsort(-predict_temp.values, axis=1)[:, :2]
-                column_name = ['Most Likely', 'Second Most Likely']
-            # for the case where all values are the same
+            # if subset only provides one type option, we don't need to do prediction
             # TODO: print warning when this is the case
-            else:
-                most_likely_temp = np.argsort(-predict_temp.values, axis=1)
-                column_name = ['Most Likely']
+            if level_y_train.nunique() == 1:
+                predict_temp = pd.DataFrame(np.full(len(level_x_test), 1), columns=[level_y_train.unique()],
+                                            index=level_x_test.index)
+                most_likely_temp = pd.DataFrame([level_y_train.unique()]*len(level_x_test), columns=['Most Likely'],
+                                                index=level_x_test.index)
 
-            # TODO: deal with futurewarning
-            most_likely_temp = pd.DataFrame(predict.columns[most_likely_temp], columns=column_name,
-                                            index=predict_temp.index)
+            else:
+
+                level_weight = get_weights(train[train[kwargs['grp_type']] == higher_level], level, balance=True)
+                forest = RandomForestClassifier(n_estimators=500, oob_score=True)
+                forest.fit(X=level_x_train, y=level_y_train, sample_weight=level_weight)
+
+                predict_temp = pd.DataFrame(forest.predict_proba(X=level_x_test), columns=forest.classes_,
+                                            index=level_x_test.index)
+                most_likely_temp = np.argsort(-predict_temp.values, axis=1)[:, :2]
+
+                # TODO: deal with futurewarning
+                most_likely_temp = pd.DataFrame(predict_temp.columns[most_likely_temp], columns=['Most Likely', 'Second Most Likely'],
+                                                index=predict_temp.index)
 
             predict = pd.concat([predict, predict_temp])
             most_likely = pd.concat([most_likely, most_likely_temp])
@@ -183,16 +157,30 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
                                    index=predict.index)
 
         # TODO: r-like confusion matrix with sensitivyt/specificicty/ pso neg values etc (will need to look it up)
+
         # TODO: if hierarch, sort index to order it was in before? (we can match on the dataset anyway.. but still)
     return predict, most_likely
 
 
 if __name__ == '__main__':
+    import kennard_stone_split as ks
+
     # get rid of unnamed column
     eia = pd.read_csv('EIA_soil_predictors_27Jan2021_PS.csv').iloc[:, 1:]
 
-    # TODO: figure out the kennard stone split... for now just do regular train/test
+    # TODO: switch and test custom kennard stone split function
     train, test = train_test_split(eia, train_size=0.75, random_state=0)  # , metric='mahal')
 
     # get training weights
     weights = get_weights(train)
+
+    # train order
+    # start with order
+    order_predict, order_likely = model_build(train, test, 'Order', weights)
+
+    # great group
+    gg_predict, gg_likely = model_build(train, test, 'grt.grp', weights, hierarchical=True, grp_type='Order',
+                                        predict_df=order_likely['Most Likely'])
+
+
+

@@ -2,17 +2,17 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
 import warnings
 from pandas.core.common import SettingWithCopyWarning
 
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
 
-# TODO: plot all the figures as well
+# TODO: plot all the figures/outputs
 
 # TODO: add debug and verbose features
-# TODO: make function more efficient
+# TODO: make function more efficient if possible
+# TODO: check randomforest parameters between python and r scripts to make sure theyre the same
 
 # emulate findCorr function in R
 def find_corr(df, cutoff=0.9):
@@ -61,7 +61,6 @@ def band_eng(train, weights, feature):
         drop_cols = find_corr(feature_df.iloc[:, 1:])
         feature_df = feature_df.drop(columns=drop_cols)
 
-    # TODO: chcek to make sure the translation from ranger to random forest works; confirm with preston
     forest = RandomForestClassifier(n_estimators=500)
     forest.fit(X=feature_df.iloc[:, 1:], y=feature_df.iloc[:, 0], sample_weight=weights)
     features = list(
@@ -174,8 +173,6 @@ if __name__ == '__main__':
     # get rid of unnamed column
     eia = pd.read_csv('EIA_soil_predictors_27Jan2021_PS.csv').iloc[:, 1:]
 
-    # TODO: switch and test custom kennard stone split function
-    #train, test = train_test_split(eia, train_size=0.75, random_state=0)  # , metric='mahal')
     train, test = ks.ks_split(eia)
 
     # get training weights

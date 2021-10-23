@@ -7,7 +7,6 @@ adapted from https://hxhc.github.io/post/kennardstone-spxy/
 
 from __future__ import division
 import numpy as np
-import pandas as pd
 from scipy.spatial.distance import cdist
 
 #TODO make verbose, combine into class

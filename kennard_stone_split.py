@@ -35,13 +35,14 @@ def kennardstone(spectra, test_size=0.25, metric='euclidean', *args, **kwargs):
     Kennard, R. W., & Stone, L. A. (1969). Computer aided design of experiments.
     Technometrics, 11(1), 137-148. (https://www.jstor.org/stable/1266770)
     """
-
+    print(f'sampling data of {len(spectra)} rows')
     if test_size < 1:
         train_size = round(spectra.shape[0] * (1 - test_size))
     else:
         train_size = spectra.shape[0] - round(test_size)
 
     if train_size > 2:
+        print(f'calculating distance using {metric}')
         distance = cdist(spectra, spectra, metric=metric, *args, **kwargs)
         select_pts, remaining_pts = max_min_distance_split(distance, train_size)
     else:
@@ -79,6 +80,8 @@ def max_min_distance_split(distance, train_size):
     remaining_pts.remove(first_2pts[1])
 
     for i in range(train_size - 2):
+        if i % 100 == 0:
+            print(f'{i} samples selected')
         # find the maximum minimum distance
         select_distance = distance[select_pts, :]
         min_distance = select_distance[:, remaining_pts]

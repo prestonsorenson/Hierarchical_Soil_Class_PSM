@@ -69,7 +69,7 @@ def band_eng(train, weights, feature):
     val = []
     for x in range(1, len(features)):
         temp = feature_df[features[0:x + 1]]
-        forest = RandomForestClassifier(n_estimators=500, oob_score=True, verbose=True)
+        forest = RandomForestClassifier(n_estimators=500, oob_score=True)
         forest.fit(X=temp, y=feature_df.iloc[:, 0], sample_weight=weights)
         # print(x+1, forest.oob_score_)
         # algorithm calculates oob score, so we need to convert to error
@@ -90,11 +90,12 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
 
     band_var = []
     for bands in ['terrain', 'band_ratios', 'sar', 'optical']:
-        print(bands)
+        print(f'{level} selecting {bands} bands')
         temp = band_eng(train_sub, weights, bands)
         band_var.extend(temp)
 
     # now do the same process for the final model with all the bands
+    print('selecting final bands')
     final_bands = band_eng(train_sub[[train_sub.columns[0]] + band_var], weights, 'compile')
 
     # subset data
@@ -109,11 +110,16 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
         predict = pd.DataFrame()
         most_likely = pd.DataFrame()
         for higher_level in train[kwargs['grp_type']].unique():
-            print(f'Predicting for...{higher_level}-classified values')
+            print(f'Predicting {level} for {higher_level} values')
             # because the indices don't change, I can use the original train and test sets to subset the train/test sub by prior level
             level_x_train = final_x[train[kwargs['grp_type']] == higher_level]
             level_y_train = final_y[train[kwargs['grp_type']] == higher_level]
             level_x_test = test_x[kwargs['predict_df'] == higher_level]
+
+            # if subset is empty move onto next part of loop
+            if len(level_x_test) == 0:
+                print('skip iteration')
+                continue
 
             # if subset only provides one type option, we don't need to do prediction
             # TODO: print warning when this is the case
@@ -169,7 +175,8 @@ if __name__ == '__main__':
     eia = pd.read_csv('EIA_soil_predictors_27Jan2021_PS.csv').iloc[:, 1:]
 
     # TODO: switch and test custom kennard stone split function
-    train, test = train_test_split(eia, train_size=0.75, random_state=0)  # , metric='mahal')
+    #train, test = train_test_split(eia, train_size=0.75, random_state=0)  # , metric='mahal')
+    train, test = ks.ks_split(eia)
 
     # get training weights
     weights = get_weights(train)
@@ -181,6 +188,9 @@ if __name__ == '__main__':
     # great group
     gg_predict, gg_likely = model_build(train, test, 'grt.grp', weights, hierarchical=True, grp_type='Order',
                                         predict_df=order_likely['Most Likely'])
+
+    sb_predict, sb_likely = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True, grp_type='grt.grp',
+                                        predict_df=gg_likely['Most Likely'])
 
 
 

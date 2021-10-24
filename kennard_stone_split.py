@@ -100,10 +100,24 @@ def max_min_distance_split(distance, train_size):
 
 
 def ks_split(df, test_size=0.25, metric='mahalanobis', spectra_colrange=None):
+    """
+    Compilation for kennard-stone sampling algorithm
+    :param df: (dataframe) n x d -dimension dataframe of spectral data to sample
+    :param test_size: (float) fraction of samples to allocate to testing set. Default = 0.25
+    :param metric: (str) distance metric with which to measure distance between points (plese see kennardstone function
+    for further detail)
+    :param spectra_colrange: (list|None) a 1 x 2 -dimension list indicating the numerical index of  start and end columns
+    for the spectral data. If None, spectra_colrange = [10, -1]. Default = None
+    :return: 2 dataframes, split for training and testing
+    """
+    # determine the column range for spectra
     if spectra_colrange is None:
         spectra_colrange= [10, -1]
+    # convert numerical spectra into np.array for processing by kennard stone
     df_matrix = np.array(df.iloc[:, spectra_colrange[0]: spectra_colrange[1]])
+    # obtain indices of train/test subsets using kennard stone algorithm
     train_idx, test_idx = kennardstone(df_matrix, test_size=test_size, metric=metric)
+    # subset train/test data by provided indices
     train = df.iloc[train_idx, :]
     test = df.iloc[test_idx, :]
     return train, test

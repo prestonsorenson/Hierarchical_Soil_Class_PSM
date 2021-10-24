@@ -6,23 +6,36 @@ from pandas.core.common import SettingWithCopyWarning
 from sklearn.ensemble import RandomForestClassifier
 import warnings
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
 # TODO: plot all the figures/outputs
-
 # TODO: add debug and verbose features
 # TODO: make function more efficient if possible
-# TODO: check randomforest parameters between python and r scripts to make sure theyre the same
+# TODO: document functions
+# TODO: potentially make classes
+
 
 # emulate findCorr function in R
 def find_corr(df, cutoff=0.9):
+    """
+    Find most highly correlated values in dataframe. Emulates the findCorr Function in R:
+    The absolute values of pair-wise correlations are considered. If two variables have a high correlation,
+    the function looks at the mean absolute correlation of each variable and removes the variable with the largest
+    mean absolute correlation.
+    (https://www.rdocumentation.org/packages/DescTools/versions/0.99.40/topics/FindCorr)
+
+    :param df: (dataframe) input data for which to measure correlation
+    :param cutoff: (float) correlation cutoff, pairwise correlation of two values >= cutoff will be flagged for
+    removal as per methodology above
+    :return: (list) list of column names to remove from df
+    """
     # find correlations
     corr = df.corr()
     # find mean of correlations
     mean_corr = abs(corr.mean(axis=0)).sort_values(ascending=False)
     # find correlated pairs above the cutoff
-    corr = corr.where(abs(corr.values) > cutoff).stack().index.values
+    corr = corr.where(abs(corr.values) >= cutoff).stack().index.values
     # remove self-correlation
     corr = [unique for unique in corr if unique[0] != unique[1]]
     # starting with the highest mean correlation, go through pairs and append to drop list if found, then remove the item from list of lists
@@ -36,6 +49,14 @@ def find_corr(df, cutoff=0.9):
 
 
 def get_weights(df, level='Order', balance=False):
+    """
+    Create weights for input into randomforrest classier.
+
+    :param df: (dataframe) dataset that contains the column from which to calculate weights
+    :param level: (str) column name of data from which to calculate weights. Default = 'Order'
+    :param balance: (bool) balance weights. Default = False.
+    :return: (array) numpy array of weights
+    """
     # balance case weights at the order level
     w = (1 / df[level].value_counts()) / len(df)
     if balance:
@@ -71,12 +92,11 @@ def band_eng(train, weights, feature):
         temp = feature_df[features[0:x + 1]]
         forest = RandomForestClassifier(n_estimators=500, oob_score=True)
         forest.fit(X=temp, y=feature_df.iloc[:, 0], sample_weight=weights)
-        # print(x+1, forest.oob_score_)
         # algorithm calculates oob score, so we need to convert to error
         val.append(1 - forest.oob_score_)
     plt.figure()
     plt.plot(val)
-    plt.title(f'{feature.title()} OOB Error vs Number of Features, Sorted by Importance')
+    plt.title(f'{feature.title()} OOB Error vs Num. Features, by Importance')
     plt.show()
     # as per preston, we don't need to use the feature dict, just subset where it is a minimum
     # TODO: potentially create a condition that stops stops min if the delta between the two steps is less than a certain value
@@ -147,7 +167,6 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
 
             predict = pd.concat([predict, predict_temp])
             most_likely = pd.concat([most_likely, most_likely_temp])
-            # TODO: make sure index values are preserved
 
     else:
 
@@ -167,8 +186,6 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
                                    index=predict.index)
 
         # TODO: r-like confusion matrix with sensitivyt/specificicty/ pso neg values etc (will need to look it up)
-
-        # TODO: if hierarch, sort index to order it was in before? (we can match on the dataset anyway.. but still)
     return predict, most_likely
 
 

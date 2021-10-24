@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.common import SettingWithCopyWarning
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import confusion_matrix
 import warnings
 
 logging.basicConfig(level=logging.WARNING)
@@ -218,7 +219,11 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
                                             f'{level.title()} Second Most Likely'],
                                    index=predict.index)
 
-        # TODO: r-like confusion matrix with sensitivity/specificity
+    # TODO: make confusion matrix look nicer, calculate sensitivity, specificity, accuracy.
+    idx = [f'True {x}' for x in sorted(test_sub.unique())]
+    colz = [f'Pred {x}' for x in sorted(test_sub.unique())]
+    print(pd.Dataframe(confusion_matrix(test_sub, most_likely[f'{level} Most Likely'],
+                                        labels=sorted(test_sub.unique())), index=idx, columns=colz))
     return predict, most_likely
 
 

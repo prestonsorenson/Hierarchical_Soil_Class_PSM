@@ -1,12 +1,13 @@
+import logging
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+from pandas.core.common import SettingWithCopyWarning
 from sklearn.ensemble import RandomForestClassifier
 import warnings
-from pandas.core.common import SettingWithCopyWarning
 
+logging.basicConfig(level=logging.DEBUG)
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
-
 
 # TODO: plot all the figures/outputs
 
@@ -125,8 +126,8 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
             if level_y_train.nunique() == 1:
                 predict_temp = pd.DataFrame(np.full(len(level_x_test), 1), columns=[level_y_train.unique()],
                                             index=level_x_test.index)
-                most_likely_temp = pd.DataFrame([level_y_train.unique()]*len(level_x_test), columns=['Most Likely'],
-                                                index=level_x_test.index)
+                most_likely_temp = pd.DataFrame([level_y_train.unique()]*len(level_x_test),
+                                                columns=[f'{level.title()} Most Likely'], index=level_x_test.index)
 
             else:
 
@@ -139,7 +140,9 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
                 most_likely_temp = np.argsort(-predict_temp.values, axis=1)[:, :2]
 
                 # TODO: deal with futurewarning
-                most_likely_temp = pd.DataFrame(predict_temp.columns[most_likely_temp], columns=['Most Likely', 'Second Most Likely'],
+                most_likely_temp = pd.DataFrame(predict_temp.columns[most_likely_temp],
+                                                columns=[f'{level.title()} Most Likely',
+                                                         f'{level.title()} Second Most Likely'],
                                                 index=predict_temp.index)
 
             predict = pd.concat([predict, predict_temp])
@@ -158,13 +161,21 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
         # predict data
         predict = pd.DataFrame(forest.predict_proba(X=test_x), columns=forest.classes_, index=test_y.index)
         most_likely = np.argsort(-predict.values, axis=1)[:, :2]
-        most_likely = pd.DataFrame(predict.columns[most_likely], columns=['Most Likely', 'Second Most Likely'],
+        most_likely = pd.DataFrame(predict.columns[most_likely],
+                                   columns=[f'{level.title()} Most Likely',
+                                            f'{level.title()} Second Most Likely'],
                                    index=predict.index)
 
         # TODO: r-like confusion matrix with sensitivyt/specificicty/ pso neg values etc (will need to look it up)
 
         # TODO: if hierarch, sort index to order it was in before? (we can match on the dataset anyway.. but still)
     return predict, most_likely
+
+
+def final_compile(df, *args):
+    for temp in args:
+        df = pd.concat([df, temp], axis=1)
+    return df.sort_index()
 
 
 if __name__ == '__main__':
@@ -189,5 +200,12 @@ if __name__ == '__main__':
     sb_predict, sb_likely = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True, grp_type='grt.grp',
                                         predict_df=gg_likely['Most Likely'])
 
+    final_predictions = final_compile(test[['field_1', 'Site.ID', 'Northing', 'Easting']],
+                                      order_likely, gg_likely, sb_likely)
 
+    order_predict = final_compile(test[['field_1', 'Site.ID', 'Northing', 'Easting']], order_predict)
+
+    gg_predict = final_compile(test[['field_1', 'Site.ID', 'Northing', 'Easting']], gg_predict)
+
+    sb_predict = final_compile(test[['field_1', 'Site.ID', 'Northing', 'Easting']], sb_predict)
 

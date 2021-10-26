@@ -219,12 +219,20 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
                                             f'{level.title()} Second Most Likely'],
                                    index=predict.index)
 
-    # TODO: make confusion matrix look nicer, calculate sensitivity, specificity, accuracy.
-    idx = [f'True {x}' for x in sorted(test_sub.unique())]
-    colz = [f'Pred {x}' for x in sorted(test_sub.unique())]
-    print(pd.Dataframe(confusion_matrix(test_sub, most_likely[f'{level} Most Likely'],
-                                        labels=sorted(test_sub.unique())), index=idx, columns=colz))
-    return predict, most_likely
+    # sort values by index so they line up
+    test_y.sort_index(inplace=True)
+    most_likely.sort_index(inplace=True)
+    # TODO: calculate specificity
+    idx = [f'True {x}' for x in sorted(test_y.unique())]
+    colz = [f'Pred {x}' for x in sorted(test_y.unique())]
+    cm = pd.DataFrame(confusion_matrix(test_y, most_likely[f'{level} Most Likely'],
+                                        labels=sorted(test_sub.unique())), index=idx, columns=colz)
+    sensitivity = pd.Series([cm.loc[f'True {x}', f'Pred {x}']/sum(cm.loc[f'Pred {x}']) for x in sorted(test_y.unique())]
+                            , index=sorted(test_y.unique()))
+    print(f'Sensitivity: \n {sensitivity}')
+
+
+    return predict, most_likely, cm
 
 
 def final_compile(df, *args):
@@ -254,14 +262,14 @@ if __name__ == '__main__':
 
     # train order
     # start with order
-    order_predict, order_likely = model_build(train, test, 'Order', weights)
+    order_predict, order_likely, order_cm = model_build(train, test, 'Order', weights)
 
     # great group
-    gg_predict, gg_likely = model_build(train, test, 'grt.grp', weights, hierarchical=True, grp_type='Order',
+    gg_predict, gg_likely, gg_cm = model_build(train, test, 'grt.grp', weights, hierarchical=True, grp_type='Order',
                                         predict_df=order_likely['Most Likely'])
 
     # subgroup
-    sb_predict, sb_likely = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True, grp_type='grt.grp',
+    sb_predict, sb_likely, sb_cm = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True, grp_type='grt.grp',
                                         predict_df=gg_likely['Most Likely'])
 
     # compile datasets

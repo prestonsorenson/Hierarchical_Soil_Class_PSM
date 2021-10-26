@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.common import SettingWithCopyWarning
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, classification_report
 import warnings
 
 logging.basicConfig(level=logging.WARNING)
@@ -222,17 +222,26 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
     # sort values by index so they line up
     test_y.sort_index(inplace=True)
     most_likely.sort_index(inplace=True)
-    # TODO: calculate specificity
     idx = [f'True {x}' for x in sorted(test_y.unique())]
     colz = [f'Pred {x}' for x in sorted(test_y.unique())]
     cm = pd.DataFrame(confusion_matrix(test_y, most_likely[f'{level} Most Likely'],
                                         labels=sorted(test_sub.unique())), index=idx, columns=colz)
-    sensitivity = pd.Series([cm.loc[f'True {x}', f'Pred {x}']/sum(cm.loc[f'Pred {x}']) for x in sorted(test_y.unique())]
+    sensitivity = pd.Series([cm.loc[f'True {x}', f'Pred {x}']/sum(cm.loc[f'True {x}']) for x in sorted(test_y.unique())]
                             , index=sorted(test_y.unique()))
-    print(f'Sensitivity: \n {sensitivity}')
+    print(f'{level} Sensitivity: \n {sensitivity}')
 
+    # for loop for better comprehension
+    specificity = []
+    for x in sorted(test_y.unique()):
+        specificity.append((cm.sum().sum() - sum(cm.loc[f'True {x}']) - sum(cm.loc[f'Pred {x}'])) / (
+                    (cm.sum().sum() - sum(cm.loc[f'True {x}']) - sum(cm.loc[f'Pred {x}'])) + sum(cm.loc[f'Pred {x}']) -
+                    cm.loc[f'True {x}', f'Pred {x}']))
 
-    return predict, most_likely, cm
+    print(f'{level} Specificity: \n {specificity}')
+
+    stats = classification_report(test_y, most_likely[f'{level} Most Likely'], labels=sorted(test_sub.unique()))
+
+    return predict, most_likely, cm, stats
 
 
 def final_compile(df, *args):
@@ -262,15 +271,15 @@ if __name__ == '__main__':
 
     # train order
     # start with order
-    order_predict, order_likely, order_cm = model_build(train, test, 'Order', weights)
+    order_predict, order_likely, order_cm, order_stats = model_build(train, test, 'Order', weights)
 
     # great group
-    gg_predict, gg_likely, gg_cm = model_build(train, test, 'grt.grp', weights, hierarchical=True, grp_type='Order',
-                                        predict_df=order_likely['Most Likely'])
+    gg_predict, gg_likely, gg_cm, gg_stats= model_build(train, test, 'grt.grp', weights, hierarchical=True,
+                                                        grp_type='Order', predict_df=order_likely['Most Likely'])
 
     # subgroup
-    sb_predict, sb_likely, sb_cm = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True, grp_type='grt.grp',
-                                        predict_df=gg_likely['Most Likely'])
+    sb_predict, sb_likely, sb_cm, sb_stats = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True,
+                                                         grp_type='grt.grp', predict_df=gg_likely['Most Likely'])
 
     # compile datasets
     final_predictions = final_compile(test[['field_1', 'Site.ID', 'Northing', 'Easting']],

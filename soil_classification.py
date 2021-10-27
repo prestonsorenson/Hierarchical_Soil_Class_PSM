@@ -10,7 +10,7 @@ import warnings
 logging.basicConfig(level=logging.WARNING)
 warnings.simplefilter(action="ignore", category=SettingWithCopyWarning)
 
-# TODO: plot all the figures/outputs
+# TODO: plot all the figures/outputs labels=sorted(test_sub.unique()))
 # TODO: add debug and verbose features
 # TODO: make function more efficient if possible
 # TODO: potentially make classes
@@ -225,21 +225,26 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
     idx = [f'True {x}' for x in sorted(test_y.unique())]
     colz = [f'Pred {x}' for x in sorted(test_y.unique())]
     cm = pd.DataFrame(confusion_matrix(test_y, most_likely[f'{level} Most Likely'],
-                                        labels=sorted(test_sub.unique())), index=idx, columns=colz)
+                                        labels=sorted(test_y.unique())), index=idx, columns=colz)
     sensitivity = pd.Series([cm.loc[f'True {x}', f'Pred {x}']/sum(cm.loc[f'True {x}']) for x in sorted(test_y.unique())]
                             , index=sorted(test_y.unique()))
     print(f'{level} Sensitivity: \n {sensitivity}')
 
-    # for loop for better comprehension
+    #for loop for better comprehension
     specificity = []
+    #TN/(TN+FP)
+    # for class A
+    #tn: is all non-A instances that are not classified as A.
+    #fp is all non-A instances that are classified as A.
     for x in sorted(test_y.unique()):
-        specificity.append((cm.sum().sum() - sum(cm.loc[f'True {x}']) - sum(cm.loc[f'Pred {x}'])) / (
-                    (cm.sum().sum() - sum(cm.loc[f'True {x}']) - sum(cm.loc[f'Pred {x}'])) + sum(cm.loc[f'Pred {x}']) -
-                    cm.loc[f'True {x}', f'Pred {x}']))
+        tn = cm.sum().sum() - sum(cm.loc[f'True {x}']) - sum(cm.loc[:, f'Pred {x}']) + cm.loc[f'True {x}', f'Pred {x}']
+        fp = sum(cm.loc[:, f'Pred {x}']) - cm.loc[f'True {x}', f'Pred {x}']
+        specificity.append(tn/(tn+fp))
+    specificity = pd.Series(specificity, index=sorted(test_y.unique()))
 
     print(f'{level} Specificity: \n {specificity}')
 
-    stats = classification_report(test_y, most_likely[f'{level} Most Likely'], labels=sorted(test_sub.unique()))
+    stats = classification_report(test_y, most_likely[f'{level} Most Likely'], labels=sorted(test_y.unique()))
 
     return predict, most_likely, cm, stats
 

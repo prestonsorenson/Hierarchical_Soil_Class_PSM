@@ -100,20 +100,40 @@ def band_eng(df, weights, feature):
     features = list(
         pd.Series(forest.feature_importances_, index=feature_df.columns[1:]).sort_values(ascending=False).index)
     val = []
+
+    # select feature importance by removing rather than adding features and then resorting every time
+    loop_features = features.copy()
+    # initialize feat_list to preserve the list as it exists at a certain point in loop, this way
+    # final features are not subset from original feature importance list order
+    feat_list = []
     for x in range(1, len(features)):
-        temp = feature_df[features[0:x + 1]]
+        temp = feature_df[loop_features[:-1]]
+        print(len(loop_features))
         forest = RandomForestClassifier(n_estimators=500, oob_score=True)
         forest.fit(X=temp, y=feature_df.iloc[:, 0], sample_weight=weights)
         # algorithm calculates oob score, so we need to convert to error
         val.append(1 - forest.oob_score_)
+        feat_list.append(temp.columns)
+        # resort feature importance
+        loop_features = list(
+            pd.Series(forest.feature_importances_, index=temp.columns).sort_values(ascending=False).index)
+
+    # for x in range(1, len(features)):
+    #     temp = feature_df[features[0:x + 1]]
+    #     forest = RandomForestClassifier(n_estimators=500, oob_score=True)
+    #     forest.fit(X=temp, y=feature_df.iloc[:, 0], sample_weight=weights)
+    #     # algorithm calculates oob score, so we need to convert to error
+    #     val.append(1 - forest.oob_score_)
     # plot figures
     plt.figure()
-    plt.plot(val)
+    rev_val = val.copy()
+    rev_val.reverse()
+    plt.plot(rev_val)
     plt.title(f'{feature.title()} OOB Error vs Num. Features, by Importance')
     plt.show()
     # subset to feature combination where oob error is at minimum
     # TODO: potentially create a condition that stops stops min if the delta between the two steps is less than a certain value
-    return features[:val.index(min(val)) + 1]
+    return feat_list[val.index(min(val))] #features[:val.index(min(val)) + 1]
 
 
 def model_build(train, test, level, weights, hierarchical=False, **kwargs):
@@ -140,15 +160,17 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
     test_sub = test.iloc[:, [level_dict[level]] + list(range(10, 81))]
 
     # determine which feature bands are the most useful
-    band_var = []
-    for bands in ['terrain', 'band_ratios', 'sar', 'optical']:
-        print(f'{level} selecting {bands} bands')
-        temp = band_eng(train_sub, weights, bands)
-        band_var.extend(temp)
+    # band_var = []
+    # for bands in ['terrain', 'band_ratios', 'sar', 'optical']:
+    #     print(f'{level} selecting {bands} bands')
+    #     temp = band_eng(train_sub, weights, bands)
+    #     band_var.extend(temp)
 
     # now do the same process for the final model with all the bands
-    print('selecting final bands')
-    final_bands = band_eng(train_sub[[train_sub.columns[0]] + band_var], weights, 'compile')
+
+    # response to reviewer comments
+    print('selecting bands')
+    final_bands = band_eng(train_sub, weights, 'compile')
 
     # subset data using the final bands
     final_x = train_sub[final_bands]
@@ -224,7 +246,7 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
     most_likely.sort_index(inplace=True)
     idx = [f'True {x}' for x in sorted(test_y.unique())]
     colz = [f'Pred {x}' for x in sorted(test_y.unique())]
-    cm = pd.DataFrame(confusion_matrix(test_y, most_likely[f'{level} Most Likely'],
+    cm = pd.DataFrame(confusion_matrix(test_y, most_likely[f'{level.title()} Most Likely'],
                                         labels=sorted(test_y.unique())), index=idx, columns=colz)
     sensitivity = pd.Series([cm.loc[f'True {x}', f'Pred {x}']/sum(cm.loc[f'True {x}']) for x in sorted(test_y.unique())]
                             , index=sorted(test_y.unique()))
@@ -244,7 +266,7 @@ def model_build(train, test, level, weights, hierarchical=False, **kwargs):
 
     print(f'{level} Specificity: \n {specificity}')
 
-    stats = classification_report(test_y, most_likely[f'{level} Most Likely'], labels=sorted(test_y.unique()))
+    stats = classification_report(test_y, most_likely[f'{level.title()} Most Likely'], labels=sorted(test_y.unique()))
 
     return predict, most_likely, cm, stats
 
@@ -280,11 +302,11 @@ if __name__ == '__main__':
 
     # great group
     gg_predict, gg_likely, gg_cm, gg_stats= model_build(train, test, 'grt.grp', weights, hierarchical=True,
-                                                        grp_type='Order', predict_df=order_likely['Most Likely'])
+                                                        grp_type='Order', predict_df=order_likely['Order Most Likely'])
 
     # subgroup
     sb_predict, sb_likely, sb_cm, sb_stats = model_build(train, test, 'Soil.Subgr', weights, hierarchical=True,
-                                                         grp_type='grt.grp', predict_df=gg_likely['Most Likely'])
+                                                         grp_type='grt.grp', predict_df=gg_likely['Grt.Grp Most Likely'])
 
     # compile datasets
     final_predictions = final_compile(test[['field_1', 'Site.ID', 'Northing', 'Easting']],
